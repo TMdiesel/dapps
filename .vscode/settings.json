@@ -1,0 +1,12 @@
+{
+  "workbench.colorTheme": "Default Dark Modern",
+  "solidity.telemetry": true,
+  "[typescript]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true
+  },
+  "[typescriptreact]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true
+  }
+}
