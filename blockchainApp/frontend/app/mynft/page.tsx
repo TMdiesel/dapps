@@ -1,6 +1,6 @@
 "use client";
 
-import { ethers } from "ethers";
+import { ethers, isError } from "ethers";
 import { useContext, useEffect, useRef, useState } from "react";
 import { Web3SignerContext } from "@/context/web3.context";
 import {
@@ -15,9 +15,18 @@ import {
   Text,
   TextInput,
   Title,
+  Image,
+  Badge,
 } from "@mantine/core";
 import { IconCubePlus } from "@tabler/icons-react";
 import { MyERC721, MyERC721__factory } from "@/types";
+
+type NFT = {
+  tokenId: bigint;
+  name: string;
+  description: string;
+  image: string;
+};
 
 // デプロイしたMyERC721 Contractのアドレスを入力
 const contractAddress = "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6";
@@ -81,6 +90,60 @@ export default function MyNFT() {
   const [showAlert, setShowAlert] = useState(false); // Alertの表示管理
   const [alertMessage, setAlertMessage] = useState(""); // Alertのメッセージ
 
+  // 保存するNFTの一覧を生成
+  const [myNFTs, setMyNFTs] = useState<NFT[]>([]);
+
+  // MyERC721コントラクトを呼び出して、自身が保有するNFTの情報を取得
+  useEffect(() => {
+    const fetchMyNFTs = async () => {
+      const nfts = [];
+
+      if (myERC721Contract && myERC721Contract.runner) {
+        const myAddress = await signer?.getAddress();
+
+        // 自分が保有するNFTの総数を確認
+        let balance = BigInt(0);
+        try {
+          balance = await myERC721Contract.balanceOf(myAddress);
+        } catch (err) {
+          if (isError(err, "BAD_DATA")) {
+            // balanceOf において、対応アドレスの保有NFTが 0 のときは、BAD_DATA エラーが発生するためハンドリング
+            balance = BigInt(0);
+          } else {
+            throw err;
+          }
+        }
+
+        for (let i = 0; i < balance; i++) {
+          // ERC721Enumerable のメソッドを利用して、インデックスから自身が保有するNFTの tokenId を取得
+          const tokenId = await myERC721Contract.tokenOfOwnerByIndex(
+            myAddress,
+            i
+          );
+
+          // NOTE：本来は下記のように tokenURI から JSON Metadata を取得し NFT のコンテンツ情報にアクセス
+          // const tokenURI = await myERC721Contract.tokenURI(tokenId);
+          // const response = await fetch(tokenURI);
+          // const jsonMetaData = await response.json();
+
+          // NOTICE：下記は画面表示のためのダミーデータ
+          const jsonMetaData = {
+            name: `NFT #${tokenId}`,
+            description:
+              "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+            image: `https://picsum.photos/seed/${tokenId}/300/200`,
+          };
+
+          nfts.push({ tokenId, ...jsonMetaData });
+        }
+
+        setMyNFTs(nfts);
+      }
+    };
+
+    fetchMyNFTs();
+  }, [myERC721Contract, signer]);
+
   return (
     <div>
       <Title order={1} style={{ paddingBottom: 12 }}>
@@ -127,6 +190,24 @@ export default function MyNFT() {
             </Button>
           </Stack>
         </Card>
+        {myNFTs.map((nft, index) => (
+          <Card key={index} shadow="sm" padding="lg" radius="md" withBorder>
+            <Card.Section>
+              <Image src={nft.image} height={160} alt="No image" />
+            </Card.Section>
+
+            <Group justify="space-between" mt="md" mb="xs">
+              <Text fw={500}>{nft.name}</Text>
+              <Badge color="blue" variant="light">
+                tokenId: {nft.tokenId.toString()}
+              </Badge>
+            </Group>
+
+            <Text size="sm" c="dimmed">
+              {nft.description}
+            </Text>
+          </Card>
+        ))}
       </SimpleGrid>
     </div>
   );
