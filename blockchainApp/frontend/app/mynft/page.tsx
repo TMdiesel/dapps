@@ -2,7 +2,6 @@
 
 import { ethers } from "ethers";
 import { useContext, useEffect, useRef, useState } from "react";
-import artifact from "../../abi/MyERC721.sol/MyERC721.json";
 import { Web3SignerContext } from "@/context/web3.context";
 import {
   Alert,
@@ -18,6 +17,7 @@ import {
   Title,
 } from "@mantine/core";
 import { IconCubePlus } from "@tabler/icons-react";
+import { MyERC721, MyERC721__factory } from "@/types";
 
 // デプロイしたMyERC721 Contractのアドレスを入力
 const contractAddress = "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6";
@@ -28,12 +28,13 @@ export default function MyNFT() {
   const { signer } = useContext(Web3SignerContext);
 
   // MyERC721のコントラクトのインスタンスを保持するState
-  const [myERC721Contract, setMyERC721Contract] =
-    useState<ethers.Contract | null>(null);
+  const [myERC721Contract, setMyERC721Contract] = useState<MyERC721 | null>(
+    null
+  );
 
   // MyERC721のコントラクトのインスタンスをethers.jsを利用して生成
   useEffect(() => {
-    const contract = new ethers.Contract(contractAddress, artifact.abi, signer);
+    const contract = MyERC721__factory.connect(contractAddress, signer);
     setMyERC721Contract(contract);
 
     // NFT作成フォームのデフォルト値として、現在のアカウントアドレスを設定
