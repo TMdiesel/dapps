@@ -14,8 +14,10 @@
     "hardhat": "^2.18.2"
   },
   "dependencies": {
+    "@opensea/seaport-js": "^2.0.7",
     "@openzeppelin/contracts": "^4.9.3",
     "bufferutil": "4.0.8",
+    "ethersV5": "npm:ethers@^5.7.2",
     "next": "13.4.13",
     "seaport": "github:ProjectOpenSea/seaport#1.5",
     "utf-8-validate": "6.0.3"
