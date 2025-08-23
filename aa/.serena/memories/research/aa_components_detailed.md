@@ -1,56 +1,64 @@
-# Account Abstraction コンポーネント詳細解説
+# Account Abstraction コンポーネント詳細解説（改良版）
 
-## AA全体のアーキテクチャ
+## AA全体のアーキテクチャ（Entity=ノード、Action=エッジ）
 
 ```mermaid
 graph TB
     subgraph "Frontend Layer"
-        U[User] --> UI[React Frontend]
-        UI --> WEB3[Web3 Library]
+        USER[User]
+        FRONTEND[React Frontend]
+        WEB3[Web3 Library]
     end
     
     subgraph "Off-chain Infrastructure"
-        WEB3 --> B[Bundler]
-        B --> MEMPOOL[UserOp Mempool]
-        B --> SIM[Simulation Engine]
-        B --> MEV[MEV Optimizer]
+        BUNDLER[Bundler Service]
+        MEMPOOL[UserOp Mempool]
+        SIM_ENGINE[Simulation Engine]
+        MEV_OPT[MEV Optimizer]
     end
     
     subgraph "On-chain Core"
-        EP[Entry Point Contract]
+        ENTRY_POINT[Entry Point Contract]
     end
     
     subgraph "Smart Contracts"
-        SW[Smart Contract Wallet]
-        PM[Paymaster Contract]
-        FC[Factory Contract]
-        TC[Target Contracts]
+        SMART_WALLET[Smart Contract Wallet]
+        PAYMASTER[Paymaster Contract]
+        FACTORY[Factory Contract]
+        TARGET[Target Contracts]
     end
     
     subgraph "Blockchain Network"
-        CHAIN[Ethereum/L2]
+        ETHEREUM[Ethereum/L2 Network]
     end
     
-    B --> EP
-    EP --> SW
-    EP --> PM
-    EP --> FC
-    SW --> TC
+    USER -->|操作要求| FRONTEND
+    FRONTEND -->|UserOp構築| WEB3
+    WEB3 -->|UserOp送信| BUNDLER
+    BUNDLER -->|検証・バンドリング| ENTRY_POINT
+    ENTRY_POINT -->|検証依頼| SMART_WALLET
+    ENTRY_POINT -->|ガス代確認| PAYMASTER
+    ENTRY_POINT -->|ウォレット作成| FACTORY
+    SMART_WALLET -->|実行| TARGET
     
-    EP --> CHAIN
-    SW --> CHAIN
-    PM --> CHAIN
-    FC --> CHAIN
+    BUNDLER -->|UserOp保存| MEMPOOL
+    BUNDLER -->|シミュレーション| SIM_ENGINE
+    BUNDLER -->|最適化| MEV_OPT
     
-    style U fill:#e3f2fd
-    style B fill:#f3e5f5
-    style EP fill:#e8f5e8
-    style SW fill:#fff3e0
-    style PM fill:#fce4ec
-    style FC fill:#e1f5fe
+    ENTRY_POINT -->|トランザクション実行| ETHEREUM
+    SMART_WALLET -->|状態変更| ETHEREUM
+    PAYMASTER -->|ガス代支払い| ETHEREUM
+    FACTORY -->|コントラクトデプロイ| ETHEREUM
+    
+    style USER fill:#e3f2fd
+    style BUNDLER fill:#f3e5f5
+    style ENTRY_POINT fill:#e8f5e8
+    style SMART_WALLET fill:#fff3e0
+    style PAYMASTER fill:#fce4ec
+    style FACTORY fill:#e1f5fe
 ```
 
-## 1. Bundler（バンドラー）
+## 1. Bundler（バンドラー）詳細アーキテクチャ（改良版）
 
 ### 役割
 - **UserOperationの収集**: 複数ユーザーからのUserOpを集める
@@ -58,69 +66,300 @@ graph TB
 - **バンドリング**: 複数のUserOpを1つのトランザクションにまとめる
 - **オンチェーン送信**: Entry Pointに送信して実行
 
-### 詳細アーキテクチャ
+```mermaid
+graph TD
+    subgraph "Bundler Components"
+        API_SERVER[JSON-RPC API Server]
+        VALIDATOR[Request Validator]
+        SIM_ENGINE[Simulation Engine]
+        GAS_CALC[Gas Calculator]
+        MEMPOOL_MGR[Mempool Manager]
+        PRIORITY_Q[Priority Queue]
+        DEDUP_ENGINE[Deduplication Engine]
+        USER_SELECTOR[UserOp Selector]
+        MEV_OPT[MEV Optimizer]
+        TX_BUILDER[Transaction Builder]
+        CHAIN_SENDER[Chain Sender]
+        MONITOR[Status Monitor]
+    end
+    
+    API_SERVER -->|UserOp受信| VALIDATOR
+    VALIDATOR -->|事前検証| SIM_ENGINE
+    SIM_ENGINE -->|シミュレーション実行| GAS_CALC
+    GAS_CALC -->|ガス見積もり| MEMPOOL_MGR
+    MEMPOOL_MGR -->|UserOp格納| PRIORITY_Q
+    PRIORITY_Q -->|優先度付け| DEDUP_ENGINE
+    DEDUP_ENGINE -->|重複除去| USER_SELECTOR
+    USER_SELECTOR -->|UserOp選択| MEV_OPT
+    MEV_OPT -->|MEV最適化| TX_BUILDER
+    TX_BUILDER -->|バンドル構築| CHAIN_SENDER
+    CHAIN_SENDER -->|オンチェーン送信| MONITOR
+    
+    style API_SERVER fill:#e3f2fd
+    style SIM_ENGINE fill:#e8f5e8
+    style MEMPOOL_MGR fill:#e8f5e8
+    style MEV_OPT fill:#fff3e0
+    style CHAIN_SENDER fill:#fce4ec
+```
+
+## 2. Paymaster パターン詳細（改良版）
 
 ```mermaid
-flowchart TD
-    subgraph "Bundler Internal Architecture"
-        API[JSON-RPC API Server]
-        
-        subgraph "Validation Layer"
-            PRE[Pre-validation]
-            SIM[Simulation Engine]
-            GAS[Gas Estimation]
+graph TD
+    subgraph "Paymaster Implementations"
+        subgraph "Verifying Type"
+            VERIFY_PM[Verifying Paymaster]
+            SIG_VERIFIER[Signature Verifier]
+            WHITELIST_MGR[Whitelist Manager]
+            VOUCHER_VAL[Voucher Validator]
         end
         
-        subgraph "Mempool Management"
-            MP[Mempool Storage]
-            PRIO[Priority Queue]
-            DEDUP[Deduplication]
+        subgraph "Token Type"  
+            TOKEN_PM[Token Paymaster]
+            ERC20_HANDLER[ERC20 Handler]
+            SWAP_ENGINE[Swap Engine]
+            PRICE_ORACLE[Price Oracle]
         end
         
-        subgraph "Bundle Creation"
-            SEL[UserOp Selection]
-            OPT[MEV Optimization]
-            BATCH[Bundle Creation]
-        end
-        
-        subgraph "Execution"
-            TX[Transaction Builder]
-            SEND[Chain Sender]
-            MON[Monitoring]
+        subgraph "Deposit Type"
+            DEPOSIT_PM[Deposit Paymaster]
+            BALANCE_MGR[Balance Manager]
+            ACCOUNT_MGR[Account Manager]
+            RATE_LIMITER[Rate Limiter]
         end
     end
     
-    API --> PRE
-    PRE --> SIM
-    SIM --> GAS
-    GAS --> MP
-    MP --> PRIO
-    PRIO --> DEDUP
-    DEDUP --> SEL
-    SEL --> OPT
-    OPT --> BATCH
-    BATCH --> TX
-    TX --> SEND
-    SEND --> MON
+    subgraph "Core Components"
+        ENTRY_POINT_REF[Entry Point Contract]
+        GAS_RESERVE[Gas Reserve Pool]
+        CONTEXT_GEN[Context Generator]
+    end
     
-    style API fill:#e3f2fd
-    style SIM fill:#f3e5f5
-    style MP fill:#e8f5e8
-    style OPT fill:#fff3e0
-    style SEND fill:#fce4ec
+    VERIFY_PM -->|署名確認| SIG_VERIFIER
+    VERIFY_PM -->|ホワイトリスト確認| WHITELIST_MGR
+    VERIFY_PM -->|バウチャー検証| VOUCHER_VAL
+    
+    TOKEN_PM -->|トークン処理| ERC20_HANDLER
+    TOKEN_PM -->|価格変換| SWAP_ENGINE
+    TOKEN_PM -->|レート取得| PRICE_ORACLE
+    
+    DEPOSIT_PM -->|残高管理| BALANCE_MGR
+    DEPOSIT_PM -->|アカウント管理| ACCOUNT_MGR
+    DEPOSIT_PM -->|制限確認| RATE_LIMITER
+    
+    ENTRY_POINT_REF -->|検証依頼| VERIFY_PM
+    ENTRY_POINT_REF -->|検証依頼| TOKEN_PM
+    ENTRY_POINT_REF -->|検証依頼| DEPOSIT_PM
+    
+    CONTEXT_GEN -->|コンテキスト生成| ENTRY_POINT_REF
+    GAS_RESERVE -->|ガス代預託| ENTRY_POINT_REF
+    
+    style VERIFY_PM fill:#e8f5e8
+    style TOKEN_PM fill:#fff3e0
+    style DEPOSIT_PM fill:#fce4ec
+    style ENTRY_POINT_REF fill:#f3e5f5
 ```
 
-### 動作フロー
-1. **UserOp受信**: JSON-RPC経由でUserOperationを受信
-2. **シミュレーション**: ガス計算と実行可能性を確認
-3. **メンプール管理**: 有効なUserOpをメンプールに保存
-4. **バンドル作成**: 利益最大化のためUserOpを選択・組み合わせ
-5. **オンチェーン実行**: handleOps()をEntry Pointで呼び出し
+## 3. 完全なUserOperation データフロー（Paymaster、Factory含む）
 
-### 経済モデル
-- **MEV機会**: ガス差額やPaymaster報酬で利益を得る
-- **競争環境**: 複数のBundlerが競合
-- **リスク**: 失敗したUserOpのガス代負担
+```mermaid
+sequenceDiagram
+    participant User as User
+    participant Frontend as Frontend
+    participant Bundler as Bundler Service
+    participant EntryPoint as Entry Point Contract
+    participant Wallet as Smart Wallet
+    participant Paymaster as Paymaster Contract
+    participant Factory as Factory Contract
+    participant Target as Target Contract
+    participant Mempool as Mempool Storage
+    participant SimEngine as Simulation Engine
+    
+    Note over User,Target: Phase 1: UserOperation 作成・送信
+    User->>Frontend: 操作要求 (送金、スワップ等)
+    Frontend->>Frontend: UserOperation構築
+    Frontend->>User: 署名要求 (MetaMask等)
+    User->>Frontend: 秘密鍵で署名
+    Frontend->>Bundler: eth_sendUserOperation
+    
+    Note over Bundler,SimEngine: Phase 2: Bundler検証・シミュレーション
+    Bundler->>Bundler: 基本フォーマット検証
+    Bundler->>SimEngine: シミュレーション依頼
+    SimEngine->>EntryPoint: validateUserOp() (dry run)
+    
+    alt 新規ウォレット作成が必要
+        EntryPoint->>Factory: createAccount()シミュレーション
+        Factory-->>EntryPoint: 作成可能性確認
+    end
+    
+    EntryPoint->>Wallet: validateUserOp()シミュレーション
+    Wallet-->>EntryPoint: 検証結果返却
+    
+    alt Paymaster使用の場合
+        EntryPoint->>Paymaster: validatePaymasterUserOp()
+        Paymaster->>Paymaster: 資格・残高確認
+        Paymaster-->>EntryPoint: context + validation結果
+    end
+    
+    EntryPoint-->>SimEngine: 総合シミュレーション結果
+    SimEngine-->>Bundler: ガス見積もり含む検証結果
+    
+    alt 検証成功
+        Bundler->>Mempool: UserOp格納
+        Bundler-->>Frontend: UserOpHash返却
+    else 検証失敗
+        Bundler-->>Frontend: エラー詳細返却
+    end
+    
+    Note over Bundler,Target: Phase 3: バンドリング・実行
+    Bundler->>Mempool: 実行対象UserOp選択
+    Bundler->>Bundler: MEV最適化・バンドル作成
+    Bundler->>EntryPoint: handleOps(UserOp[])実行
+    
+    loop 各UserOpに対して実際の処理
+        Note over EntryPoint,Target: Individual UserOp Processing
+        
+        alt 新規ウォレット作成
+            EntryPoint->>Factory: createAccount()実行
+            Factory->>Wallet: ウォレットデプロイ・初期化
+            Factory-->>EntryPoint: ウォレット作成完了
+        end
+        
+        EntryPoint->>Wallet: validateUserOp()実際の検証
+        Wallet->>Wallet: 署名検証・nonce確認
+        Wallet-->>EntryPoint: 検証結果
+        
+        alt Paymaster使用
+            EntryPoint->>Paymaster: validatePaymasterUserOp()実行
+            Paymaster->>Paymaster: 事前ガス代徴収
+            Paymaster-->>EntryPoint: コンテキスト確定
+        end
+        
+        alt 検証成功時のみ実行
+            EntryPoint->>Wallet: execute()実行
+            Wallet->>Target: 実際のビジネスロジック実行
+            Target->>Target: 状態変更・処理実行
+            Target-->>Wallet: 実行結果
+            Wallet-->>EntryPoint: 実行完了通知
+        end
+        
+        alt Paymaster後処理
+            EntryPoint->>Paymaster: postOp(実際のガス消費量)
+            Paymaster->>Paymaster: 最終決済処理
+            Paymaster->>Paymaster: 差額返金/追加徴収
+        end
+    end
+    
+    EntryPoint-->>Bundler: 全UserOp実行完了
+    Bundler-->>Frontend: UserOp receipt通知
+    Frontend-->>User: 処理完了・結果表示
+```
+
+## 4. ガス計算とコストモデル（改良版）
+
+```mermaid
+graph TD
+    subgraph "Gas Cost Breakdown"
+        TOTAL_GAS[Total Gas Cost]
+        
+        subgraph "Pre-verification Components"
+            PRE_GAS[preVerificationGas]
+            BUNDLER_OVERHEAD[Bundler Overhead Calculator]
+            CALLDATA_COST[Calldata Cost Calculator]
+        end
+        
+        subgraph "Verification Components"
+            VER_GAS[verificationGasLimit]
+            SIG_VERIFIER_GAS[Signature Verifier]
+            PAYMASTER_VERIFIER[Paymaster Verifier]
+            NONCE_CHECKER[Nonce Checker]
+        end
+        
+        subgraph "Execution Components"
+            CALL_GAS[callGasLimit]
+            CONTRACT_CALLER[Contract Caller]
+            STATE_UPDATER[State Updater]
+        end
+        
+        subgraph "Post-processing Components"
+            POST_GAS[postOpGas]
+            PAYMASTER_SETTLER[Paymaster Settler]
+            EVENT_EMITTER[Event Emitter]
+        end
+    end
+    
+    TOTAL_GAS -->|構成要素| PRE_GAS
+    TOTAL_GAS -->|構成要素| VER_GAS
+    TOTAL_GAS -->|構成要素| CALL_GAS
+    TOTAL_GAS -->|構成要素| POST_GAS
+    
+    PRE_GAS -->|計算| BUNDLER_OVERHEAD
+    PRE_GAS -->|計算| CALLDATA_COST
+    
+    VER_GAS -->|消費| SIG_VERIFIER_GAS
+    VER_GAS -->|消費| PAYMASTER_VERIFIER
+    VER_GAS -->|消費| NONCE_CHECKER
+    
+    CALL_GAS -->|実行| CONTRACT_CALLER
+    CALL_GAS -->|更新| STATE_UPDATER
+    
+    POST_GAS -->|決済| PAYMASTER_SETTLER
+    POST_GAS -->|記録| EVENT_EMITTER
+    
+    style TOTAL_GAS fill:#e1f5fe
+    style PRE_GAS fill:#f3e5f5
+    style VER_GAS fill:#e8f5e8
+    style CALL_GAS fill:#fff3e0
+    style POST_GAS fill:#fce4ec
+```
+
+## 5. エラーハンドリングと復旧フロー（改良版）
+
+```mermaid
+graph TD
+    subgraph "Error Sources"
+        USER_ERROR[User Input Error]
+        VALIDATION_ERROR[Validation Error]
+        EXECUTION_ERROR[Execution Error]
+        GAS_ERROR[Gas Estimation Error]
+        PAYMASTER_ERROR[Paymaster Error]
+    end
+    
+    subgraph "Error Handlers"
+        ERROR_DETECTOR[Error Detector]
+        ERROR_CLASSIFIER[Error Classifier]
+        RETRY_MANAGER[Retry Manager]
+        FALLBACK_HANDLER[Fallback Handler]
+    end
+    
+    subgraph "Recovery Actions"
+        REESTIMATE_GAS[Gas Re-estimation]
+        FALLBACK_PAYMASTER[Fallback to User Payment]
+        PARTIAL_EXECUTION[Partial Execution]
+        FULL_ROLLBACK[Full Rollback]
+    end
+    
+    USER_ERROR -->|検出| ERROR_DETECTOR
+    VALIDATION_ERROR -->|検出| ERROR_DETECTOR
+    EXECUTION_ERROR -->|検出| ERROR_DETECTOR
+    GAS_ERROR -->|検出| ERROR_DETECTOR
+    PAYMASTER_ERROR -->|検出| ERROR_DETECTOR
+    
+    ERROR_DETECTOR -->|分類| ERROR_CLASSIFIER
+    ERROR_CLASSIFIER -->|リトライ判定| RETRY_MANAGER
+    ERROR_CLASSIFIER -->|フォールバック実行| FALLBACK_HANDLER
+    
+    RETRY_MANAGER -->|ガス再見積もり| REESTIMATE_GAS
+    FALLBACK_HANDLER -->|支払い方法変更| FALLBACK_PAYMASTER
+    FALLBACK_HANDLER -->|部分実行| PARTIAL_EXECUTION
+    FALLBACK_HANDLER -->|完全ロールバック| FULL_ROLLBACK
+    
+    style ERROR_DETECTOR fill:#ffebee
+    style RETRY_MANAGER fill:#fff0e1
+    style FALLBACK_HANDLER fill:#f3e5f5
+```
+
+## 6. UserOperation構造とコンポーネント関係
 
 ### UserOperation構造
 ```typescript
@@ -139,186 +378,7 @@ interface UserOperation {
 }
 ```
 
-## 2. Paymaster（ペイマスター）
-
-### 役割
-- **ガス代代理支払い**: ユーザーの代わりにガス代を支払う
-- **柔軟な料金モデル**: ETH以外のトークンでの支払い受付
-- **スポンサーシップ**: 企業がユーザーのガス代を負担
-
-### Paymasterパターン詳細
-
-```mermaid
-graph TD
-    subgraph "Paymaster Types"
-        subgraph "Verifying Paymaster"
-            VP[Verifying Paymaster]
-            VP --> VPS[署名検証ロジック]
-            VP --> VPW[ホワイトリスト管理]
-            VP --> VPV[バウチャー検証]
-        end
-        
-        subgraph "Token Paymaster"  
-            TP[Token Paymaster]
-            TP --> TPE[ERC20 Exchange]
-            TP --> TPS[Swap Logic]
-            TP --> TPO[Oracle Price Feed]
-        end
-        
-        subgraph "Deposit Paymaster"
-            DP[Deposit Paymaster]
-            DP --> DPB[Deposit Balance]
-            DP --> DPA[Account Management]
-            DP --> DPR[Rate Limiting]
-        end
-    end
-    
-    subgraph "Paymaster Flow"
-        VALIDATE[validatePaymasterUserOp]
-        CONTEXT[Context Generation]
-        PREPAY[Pre-payment]
-        EXECUTE[UserOp Execution]
-        POSTOP[postOp Settlement]
-    end
-    
-    VP --> VALIDATE
-    TP --> VALIDATE
-    DP --> VALIDATE
-    VALIDATE --> CONTEXT
-    CONTEXT --> PREPAY
-    PREPAY --> EXECUTE
-    EXECUTE --> POSTOP
-    
-    style VP fill:#e8f5e8
-    style TP fill:#fff3e0
-    style DP fill:#fce4ec
-    style VALIDATE fill:#f3e5f5
-```
-
-### Paymasterの種類
-
-#### A. Verifying Paymaster
-- **署名検証型**: 事前に署名されたバウチャーを検証
-- **使用例**: プリペイド型、ホワイトリスト型
-
-#### B. Token Paymaster  
-- **トークン交換型**: ERC-20トークンでガス代を受け取る
-- **使用例**: USDCでガス代支払い
-
-#### C. Deposit Paymaster
-- **デポジット型**: 事前にデポジットされた資金を使用
-- **使用例**: サブスクリプション型アプリ
-
-### 実装例（概念）
-```solidity
-contract SimplePaymaster is BasePaymaster {
-    mapping(address => uint256) public deposits;
-    
-    function validatePaymasterUserOp(
-        UserOperation calldata userOp,
-        bytes32 userOpHash,
-        uint256 maxCost
-    ) external view override returns (bytes memory context) {
-        // 1. ユーザーの資格確認
-        // 2. ガス代の事前計算
-        // 3. 支払い能力の確認
-    }
-    
-    function postOp(
-        PostOpMode mode,
-        bytes calldata context,
-        uint256 actualGasCost
-    ) external override {
-        // 実際のガス代の決済処理
-    }
-}
-```
-
-## 3. Factory Contract（ファクトリー）
-
-### 役割
-- **ウォレット展開**: 新しいスマートコントラクトウォレットの作成
-- **決定論的アドレス**: CREATE2による予測可能なアドレス生成
-- **初期化**: ウォレットの初期設定
-
-### Factory詳細フロー
-
-```mermaid
-sequenceDiagram
-    participant F as Frontend
-    participant FC as Factory Contract
-    participant W as Wallet Implementation
-    participant SW as Smart Wallet Instance
-    
-    Note over F,SW: カウンターファクチュアル フェーズ
-    F->>FC: getAddress(owner, salt)
-    FC->>FC: CREATE2 アドレス計算
-    FC-->>F: 予測アドレス
-    F->>F: 予測アドレスに資金送金
-    
-    Note over F,SW: ウォレット作成フェーズ
-    F->>FC: createAccount(owner, salt) via UserOp
-    FC->>FC: アドレス存在確認
-    
-    alt ウォレット未作成
-        FC->>W: cloneDeterministic()
-        W->>SW: プロキシ作成
-        FC->>SW: initialize(owner)
-        SW->>SW: 初期化処理
-        SW-->>FC: 作成完了
-    else 既に存在
-        FC->>SW: 既存インスタンス返却
-    end
-    
-    FC-->>F: ウォレットアドレス
-```
-
-### CREATE2の利点
-- **アドレス事前計算**: デプロイ前にアドレスが分かる
-- **カウンターファクチュアル**: 実際にデプロイする前に送金可能
-- **セキュリティ**: saltによる一意性保証
-
-### 実装例
-```solidity
-contract SimpleAccountFactory {
-    IEntryPoint public immutable entryPoint;
-    
-    function createAccount(
-        address owner,
-        uint256 salt
-    ) public returns (SimpleAccount ret) {
-        address addr = getAddress(owner, salt);
-        uint codeSize = addr.code.length;
-        if (codeSize > 0) {
-            return SimpleAccount(payable(addr));
-        }
-        
-        ret = SimpleAccount(payable(Clones.cloneDeterministic(
-            accountImplementation, 
-            _salt
-        )));
-        ret.initialize(owner);
-    }
-    
-    function getAddress(address owner, uint256 salt)
-        public view returns (address) {
-        return Clones.predictDeterministicAddress(
-            accountImplementation,
-            _salt
-        );
-    }
-}
-```
-
-## 4. Smart Contract Wallet
-
-### 基本機能
-- **署名検証**: カスタム署名方式の実装
-- **実行ロジック**: トランザクションの実行
-- **アップグレード**: プロキシパターンでの機能拡張
-
-### Wallet内部構造
-
+### Smart Wallet内部構造
 ```mermaid
 classDiagram
     class BaseAccount {
@@ -352,182 +412,10 @@ classDiagram
         +executeRecovery()
     }
     
-    class TimelockAccount {
-        +mapping(bytes32=>Timelock) timelocks
-        +uint256 delay
-        +validateUserOp()
-        +scheduleOperation()
-        +executeOperation()
-    }
-    
     BaseAccount <|-- SimpleAccount
     BaseAccount <|-- MultiSigAccount
     BaseAccount <|-- RecoveryAccount
-    BaseAccount <|-- TimelockAccount
 ```
-
-### セキュリティ機能
-- **マルチシグ**: 複数署名による承認
-- **時間ロック**: 重要な操作の遅延実行
-- **支出制限**: 1日あたりの支出上限
-- **ホワイトリスト**: 許可されたアドレスのみとの取引
-
-### 実装例（シンプル版）
-```solidity
-contract SimpleAccount is BaseAccount {
-    address public owner;
-    IEntryPoint private immutable _entryPoint;
-    
-    function validateUserOp(
-        UserOperation calldata userOp,
-        bytes32 userOpHash,
-        uint256 missingAccountFunds
-    ) external override returns (uint256 validationData) {
-        // 1. 署名の検証
-        // 2. nonce の確認
-        // 3. ガス代の事前支払い
-    }
-    
-    function execute(
-        address dest,
-        uint256 value,
-        bytes calldata func
-    ) external {
-        _requireFromEntryPoint();
-        _call(dest, value, func);
-    }
-}
-```
-
-## 5. UserOperation データフロー
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant F as Frontend
-    participant B as Bundler
-    participant E as EntryPoint
-    participant W as Smart Wallet
-    participant P as Paymaster
-    participant T as Target Contract
-    
-    Note over U,T: UserOperation 作成・送信フェーズ
-    U->>F: 操作要求 (送金、スワップ等)
-    F->>F: UserOperation 構築
-    F->>U: 署名要求 (MetaMask等)
-    U->>F: 署名完了
-    F->>B: eth_sendUserOperation
-    
-    Note over B: Bundler 検証フェーズ
-    B->>B: 基本検証 (ガス、フォーマット)
-    B->>E: シミュレーション実行
-    E->>W: validateUserOp() (dry run)
-    alt Paymaster使用
-        E->>P: validatePaymasterUserOp()
-        P-->>E: context + validation
-    end
-    W-->>E: validation結果
-    E-->>B: シミュレーション結果
-    B->>B: メンプール追加
-    
-    Note over B: バンドリング・実行フェーズ  
-    B->>B: MEV最適化でUserOp選択
-    B->>E: handleOps(UserOp[])
-    
-    loop 各UserOpに対して
-        E->>W: validateUserOp() (実際)
-        alt Paymaster使用
-            E->>P: validatePaymasterUserOp()
-            P->>P: ガス代事前徴収
-        end
-        E->>W: execute()
-        W->>T: 実際の処理実行
-        T-->>W: 実行結果
-        alt Paymaster使用
-            E->>P: postOp() (実際のガス代決済)
-        end
-    end
-    
-    E-->>B: 実行完了
-    B-->>F: UserOp receipt
-    F-->>U: 処理完了通知
-```
-
-## 6. ガス計算とコストモデル
-
-```mermaid
-graph LR
-    subgraph "Gas Components"
-        TOTAL[Total Gas Cost]
-        
-        subgraph "Pre-verification"
-            PRE[preVerificationGas]
-            PRE1[Bundler Overhead]
-            PRE2[Calldata Cost]
-        end
-        
-        subgraph "Verification"
-            VER[verificationGasLimit]
-            VER1[Signature Verification]
-            VER2[Paymaster Validation]
-            VER3[Nonce Check]
-        end
-        
-        subgraph "Execution"
-            CALL[callGasLimit]
-            CALL1[Target Contract Calls]
-            CALL2[State Changes]
-        end
-        
-        subgraph "Post-processing"
-            POST[postOpGas]
-            POST1[Paymaster Settlement]
-            POST2[Event Emission]
-        end
-    end
-    
-    TOTAL --> PRE
-    TOTAL --> VER  
-    TOTAL --> CALL
-    TOTAL --> POST
-    
-    PRE --> PRE1
-    PRE --> PRE2
-    VER --> VER1
-    VER --> VER2
-    VER --> VER3
-    CALL --> CALL1
-    CALL --> CALL2
-    POST --> POST1
-    POST --> POST2
-    
-    style TOTAL fill:#e1f5fe
-    style PRE fill:#f3e5f5
-    style VER fill:#e8f5e8
-    style CALL fill:#fff3e0
-    style POST fill:#fce4ec
-```
-
-### 各段階のガス消費
-1. **Pre-verification**: UserOpのサイズ・複雑さに基づく
-2. **Validation**: 署名検証、Paymaster検証
-3. **Execution**: 実際のスマートコントラクト呼び出し  
-4. **Post-op**: Paymaster の後処理
-
-## 全体の相互作用
-
-### 正常フロー
-1. **ユーザー**: UserOperationを作成・署名
-2. **Bundler**: UserOpを受信・検証・メンプール追加
-3. **Bundler**: 複数UserOpをバンドルしてEntry Pointに送信
-4. **Entry Point**: 各UserOpを順次検証・実行
-5. **Wallet**: 署名検証後、実際の処理を実行
-6. **Paymaster**: 必要に応じてガス代を代理支払い
-
-### エラーハンドリング
-- **検証失敗**: UserOpがリジェクトされる
-- **実行失敗**: 個別のUserOpのみ失敗、他は継続
-- **ガス不足**: Paymasterまたはユーザーの責任
 
 ## 学習での実装優先順位
 
