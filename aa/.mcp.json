@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/muratatakuya/project/blockchain/web3-study/aa"
+      ]
+    },
+    "git": {
+      "command": "uvx",
+      "args": ["mcp-server-git"]
+    },
+    "serena": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/oraios/serena",
+        "serena-mcp-server",
+        "--context",
+        "ide-assistant"
+      ]
+    }
+  }
+}
