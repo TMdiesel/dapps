@@ -137,6 +137,10 @@ declare module "hardhat/types/runtime" {
       name: "DemoPaymaster",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.DemoPaymaster__factory>;
+    getContractFactory(
+      name: "MockPaymaster",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.MockPaymaster__factory>;
 
     getContractAt(
       name: "BasePaymaster",
@@ -293,6 +297,11 @@ declare module "hardhat/types/runtime" {
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.DemoPaymaster>;
+    getContractAt(
+      name: "MockPaymaster",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.MockPaymaster>;
 
     deployContract(
       name: "BasePaymaster",
@@ -418,6 +427,10 @@ declare module "hardhat/types/runtime" {
       name: "DemoPaymaster",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.DemoPaymaster>;
+    deployContract(
+      name: "MockPaymaster",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.MockPaymaster>;
 
     deployContract(
       name: "BasePaymaster",
@@ -574,6 +587,11 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.DemoPaymaster>;
+    deployContract(
+      name: "MockPaymaster",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.MockPaymaster>;
 
     // default types
     getContractFactory(

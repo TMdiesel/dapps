@@ -30,15 +30,20 @@ export class AAProvider {
     this.bundlerUrl = bundlerUrl
     this.entryPointAddress = entryPointAddress
     this.accountFactoryAddress = accountFactoryAddress
+    // Suppress unused parameter warnings for demo
+    void this.provider
+    void this.bundlerUrl
+    void this.entryPointAddress
+    void this.accountFactoryAddress
   }
 
-  async createSmartAccount(owner: string, salt?: string): Promise<string> {
+  async createSmartAccount(_owner: string, _salt?: string): Promise<string> {
     // For demo, return a mock address
     // In real implementation, this would interact with AccountFactory
     return '0x' + Math.random().toString(16).slice(2, 42)
   }
 
-  async getAccountAddress(owner: string, salt: string): Promise<string> {
+  async getAccountAddress(_owner: string, _salt: string): Promise<string> {
     // Calculate counterfactual address
     return '0x' + Math.random().toString(16).slice(2, 42)
   }
@@ -54,7 +59,7 @@ export class AAProvider {
     return '0x' + Math.random().toString(16).slice(2, 64)
   }
 
-  async estimateUserOperationGas(userOp: Partial<UserOperationStruct>) {
+  async estimateUserOperationGas(_userOp: Partial<UserOperationStruct>) {
     // Mock gas estimation
     return {
       callGasLimit: '50000',
@@ -78,7 +83,7 @@ export class AAProvider {
     from: string,
     to: string,
     amount: string,
-    tokenAddress: string
+    _tokenAddress: string
   ): Promise<string> {
     const callData = this.encodeTransferCall(to, amount)
     
@@ -92,7 +97,7 @@ export class AAProvider {
   }
 
   // NFT operations
-  async mintNFT(account: string, nftAddress: string): Promise<string> {
+  async mintNFT(account: string, _nftAddress: string): Promise<string> {
     const callData = this.encodeMintCall(account)
     
     const userOp: Partial<UserOperationStruct> = {
@@ -106,7 +111,7 @@ export class AAProvider {
   // DEX operations
   async swapTokens(
     account: string,
-    dexAddress: string,
+    _dexAddress: string,
     tokenIn: string,
     tokenOut: string,
     amountIn: string,

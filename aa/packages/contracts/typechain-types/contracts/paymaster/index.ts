@@ -2,3 +2,4 @@
 /* tslint:disable */
 /* eslint-disable */
 export type { DemoPaymaster } from "./DemoPaymaster";
+export type { MockPaymaster } from "./MockPaymaster";

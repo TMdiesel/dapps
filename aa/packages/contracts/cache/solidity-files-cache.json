@@ -1485,6 +1485,42 @@
       "artifacts": [
         "DemoToken"
       ]
+    },
+    "/Users/muratatakuya/project/blockchain/web3-study/aa/packages/contracts/contracts/paymaster/MockPaymaster.sol": {
+      "lastModificationDate": 1755959650465,
+      "contentHash": "bd78cd00f9aba1269e7eae702f2c51a0",
+      "sourceName": "contracts/paymaster/MockPaymaster.sol",
+      "solcConfig": {
+        "version": "0.8.23",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.23"
+      ],
+      "artifacts": [
+        "MockPaymaster"
+      ]
     }
   }
 }

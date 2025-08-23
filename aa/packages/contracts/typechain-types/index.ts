@@ -70,3 +70,5 @@ export type { SimpleDEX } from "./contracts/demo/SimpleDEX";
 export { SimpleDEX__factory } from "./factories/contracts/demo/SimpleDEX__factory";
 export type { DemoPaymaster } from "./contracts/paymaster/DemoPaymaster";
 export { DemoPaymaster__factory } from "./factories/contracts/paymaster/DemoPaymaster__factory";
+export type { MockPaymaster } from "./contracts/paymaster/MockPaymaster";
+export { MockPaymaster__factory } from "./factories/contracts/paymaster/MockPaymaster__factory";

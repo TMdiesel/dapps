@@ -77,8 +77,8 @@ export const useAAWallet = () => {
   }
 
   const sendTransaction = async (
-    to: string,
-    value: string,
+    _to: string,
+    _value: string,
     data: string = '0x'
   ) => {
     if (!state.smartAccount) {

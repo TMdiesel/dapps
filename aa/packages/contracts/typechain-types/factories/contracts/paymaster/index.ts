@@ -2,3 +2,4 @@
 /* tslint:disable */
 /* eslint-disable */
 export { DemoPaymaster__factory } from "./DemoPaymaster__factory";
+export { MockPaymaster__factory } from "./MockPaymaster__factory";
