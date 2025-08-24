@@ -24,6 +24,7 @@ export class AAProvider {
   private paymasterAddress: string
   private deployedContracts: any
   private recentTxHashes: string[] = []
+  private initialized: Promise<void>
 
   constructor(
     rpcUrl: string = 'http://localhost:8545',
@@ -43,7 +44,7 @@ export class AAProvider {
     this.paymasterAddress = '0x59b670e9fA9D0A427751Af201D676719a970857b'
     
     // Then try to load from JSON (async)
-    this.loadDeployedContracts()
+    this.initialized = this.loadDeployedContracts()
   }
 
   private async loadDeployedContracts() {
@@ -599,7 +600,9 @@ export class AAProvider {
 
   // Get real transaction history
   async getTransactionHistory(smartAccount: string): Promise<any[]> {
+    await this.initialized
     console.log('getTransactionHistory called with:', smartAccount)
+    
     try {
       const latestBlock = await this.provider.getBlockNumber()
       console.log('Latest block:', latestBlock)
@@ -610,112 +613,168 @@ export class AAProvider {
       
       for (let i = 0; i <= latestBlock; i++) {
         try {
-          const block = await this.provider.getBlock(i, true)
-          if (block && block.transactions && block.transactions.length > 0) {
-            console.log(`Block ${i}: ${block.transactions.length} transactions`)
-            
-            for (const tx of block.transactions) {
-              if (typeof tx === 'object' && tx !== null && 'hash' in tx) {
-                const transaction = tx as any
+          // First get block without transaction details
+          const blockHeader = await this.provider.getBlock(i, false)
+          if (!blockHeader) continue
+          
+          console.log(`Block ${i}: ${blockHeader.transactions.length} transactions`)
+          
+          // Special debug for block 27
+          if (i === 27) {
+            console.log('=== DEBUG BLOCK 27 ===')
+            console.log('Block 27 transaction hashes:', blockHeader.transactions)
+          }
+          
+          // Process each transaction hash
+          for (const txHash of blockHeader.transactions) {
+            try {
+              // Get full transaction details
+              const transaction = await this.provider.getTransaction(txHash)
+              if (!transaction) continue
+
+              // Special debug for the specific NFT mint transaction
+              if (transaction.hash === '0x98b61159377c1416ac2a909e2f04b04b351d43209231f44d0a07253adf4da81e' || 
+                  transaction.hash?.startsWith('0x98b61159')) {
+                console.log('=== FOUND NFT MINT TRANSACTION ===')
+                console.log('NFT Mint TX Details:', {
+                  hash: transaction.hash,
+                  from: transaction.from,
+                  to: transaction.to,
+                  data: transaction.data,
+                  value: transaction.value?.toString()
+                })
+              }
+
+              console.log(`[BLOCK ${i}] Checking TX:`, {
+                hash: transaction.hash,
+                from: transaction.from,
+                to: transaction.to,
+                data: transaction.data
+              });
+              
+              // More comprehensive search criteria
+              const smartAccountLower = smartAccount.toLowerCase()
+              const factoryAddressLower = this.accountFactoryAddress.toLowerCase()
+              
+              console.log('Comparison details:', {
+                smartAccountLower,
+                transactionToLower: transaction.to?.toLowerCase(),
+                transactionFromLower: transaction.from?.toLowerCase(),
+                factoryAddressLower
+              })
+              
+              // Check if transaction is related to our Smart Account:
+              const isDirectlyRelated = 
+                transaction.to?.toLowerCase() === smartAccountLower || 
+                transaction.from?.toLowerCase() === smartAccountLower
+              
+              const isFactoryRelated = 
+                transaction.to?.toLowerCase() === factoryAddressLower
+              
+              const isDataRelated = transaction.data && 
+                transaction.data.toLowerCase().includes(smartAccountLower.slice(2))
+              
+              // Define isContractCall properly
+              const isContractCall = transaction.data && transaction.data !== '0x'
+              
+              console.log('Relevance check:', {
+                isDirectlyRelated,
+                isFactoryRelated,
+                isDataRelated,
+                isContractCall
+              })
+              
+              const isRelevant = isDirectlyRelated || isFactoryRelated || isDataRelated
+              
+              if (isRelevant) {
+                console.log(`🔍 Found potentially relevant transaction in block ${i}:`, {
+                  hash: transaction.hash,
+                  from: transaction.from,
+                  to: transaction.to,
+                  value: transaction.value?.toString(),
+                  data: transaction.data?.slice(0, 30) + '...',
+                  directlyRelated: isDirectlyRelated,
+                  factoryRelated: isFactoryRelated,
+                  dataRelated: isDataRelated,
+                  isContractCall: isContractCall
+                })
                 
-                // More comprehensive search criteria
-                const smartAccountLower = smartAccount.toLowerCase()
-                const factoryAddressLower = this.accountFactoryAddress.toLowerCase()
-                
-                // Check if transaction is related to our Smart Account:
-                const isDirectlyRelated = 
-                  transaction.to?.toLowerCase() === smartAccountLower || 
-                  transaction.from?.toLowerCase() === smartAccountLower
-                
-                const isFactoryRelated = 
-                  transaction.to?.toLowerCase() === factoryAddressLower
-                
-                const isDataRelated = transaction.data && 
-                  transaction.data.toLowerCase().includes(smartAccountLower.slice(2))
-                
-                // Also check for any other contract interactions that might be related
-                const isContractCall = transaction.data && transaction.data !== '0x' && transaction.data.length > 10
-                
-                const isRelevant = isDirectlyRelated || isFactoryRelated || isDataRelated || isContractCall
-                
-                if (isRelevant) {
-                  console.log(`🔍 Found potentially relevant transaction in block ${i}:`, {
-                    hash: transaction.hash,
-                    from: transaction.from,
-                    to: transaction.to,
-                    value: transaction.value?.toString(),
-                    data: transaction.data?.slice(0, 30) + '...',
-                    directlyRelated: isDirectlyRelated,
-                    factoryRelated: isFactoryRelated,
-                    dataRelated: isDataRelated,
-                    isContractCall: isContractCall
-                  })
+                try {
+                  const receipt = await this.provider.getTransactionReceipt(transaction.hash)
                   
-                  try {
-                    const receipt = await this.provider.getTransactionReceipt(transaction.hash)
-                    
-                    // More detailed analysis of logs for Smart Account activity
-                    let isActuallyRelated = isDirectlyRelated || isFactoryRelated || isDataRelated
-                    
-                    if (!isActuallyRelated && receipt && receipt.logs) {
-                      // Check transaction logs for Smart Account address
-                      for (const log of receipt.logs) {
-                        if (log.address?.toLowerCase() === smartAccountLower ||
-                            log.topics?.some(topic => topic.toLowerCase().includes(smartAccountLower.slice(2))) ||
-                            log.data?.toLowerCase().includes(smartAccountLower.slice(2))) {
-                          isActuallyRelated = true
-                          console.log(`📝 Found Smart Account in transaction logs:`, log)
-                          break
-                        }
+                  // More detailed analysis of logs for Smart Account activity
+                  let isActuallyRelated = isDirectlyRelated || isFactoryRelated || isDataRelated
+                  
+                  if (!isActuallyRelated && receipt && receipt.logs) {
+                    // Check transaction logs for Smart Account address
+                    for (const log of receipt.logs) {
+                      if (log.address?.toLowerCase() === smartAccountLower ||
+                          log.topics?.some(topic => topic.toLowerCase().includes(smartAccountLower.slice(2))) ||
+                          log.data?.toLowerCase().includes(smartAccountLower.slice(2))) {
+                        isActuallyRelated = true
+                        console.log(`📝 Found Smart Account in transaction logs:`, log)
+                        break
                       }
                     }
-                    
-                    if (isActuallyRelated) {
-                      // Determine transaction description
-                      let description = 'Transaction'
-                      if (isFactoryRelated) {
-                        description = 'Smart Account Creation'
-                      } else if (transaction.data && transaction.data !== '0x') {
-                        const data = transaction.data.toLowerCase()
-                        if (data.includes('5fbfb9cf')) { // createAccount(address,uint256)
-                          description = 'Smart Account Creation'
-                        } else if (data.includes('a9059cbb')) { // transfer(address,uint256)
-                          description = 'Token Transfer'
-                        } else if (data.includes('40c10f19')) { // mint(address)
-                          description = 'NFT Mint'
-                        } else if (data.includes('b61d27f6')) { // execute(address,uint256,bytes)
-                          description = 'Smart Account Execute'
-                        } else if (data.includes('38ed1739')) { // swapExactTokensForTokens
-                          description = 'Token Swap'
-                        } else if (isContractCall) {
-                          description = 'Contract Interaction'
-                        }
-                      }
-                      
-                      console.log(`✅ Adding transaction: ${description}`)
-                      
-                      transactions.push({
-                        hash: transaction.hash,
-                        from: transaction.from,
-                        to: transaction.to,
-                        value: (transaction.value ?? 0n).toString(),
-                        gasUsed: receipt?.gasUsed.toString() || '0',
-                        status: receipt?.status === 1 ? 'success' : 'failed',
-                        blockNumber: i,
-                        timestamp: block.timestamp,
-                        description,
-                        logs: receipt?.logs.length || 0,
-                        // Include raw data for better type/action detection on UI
-                        data: transaction.data
-                      })
-                    } else {
-                      console.log(`❌ Transaction not actually related to Smart Account`)
-                    }
-                  } catch (receiptError) {
-                    console.warn(`Failed to get receipt for ${transaction.hash}:`, receiptError)
                   }
+                  
+                  if (isActuallyRelated) {
+                    // Determine transaction description
+                    let description = 'Transaction'
+                    if (isFactoryRelated) {
+                      description = 'Smart Account Creation'
+                    } else if (transaction.data && transaction.data !== '0x') {
+                      const data = transaction.data.toLowerCase()
+                      if (data.includes('5fbfb9cf')) { // createAccount(address,uint256)
+                        description = 'Smart Account Creation'
+                      } else if (data.includes('a9059cbb')) { // transfer(address,uint256)
+                        description = 'Token Transfer'
+                      } else if (data.includes('40c10f19')) { // mint(address)
+                        description = 'NFT Mint'
+                      } else if (data.includes('b61d27f6')) { // execute(address,uint256,bytes)
+                        description = 'Smart Account Execute'
+                      } else if (data.includes('38ed1739')) { // swapExactTokensForTokens
+                        description = 'Token Swap'
+                      } else if (isContractCall) {
+                        description = 'Contract Interaction'
+                      }
+                    }
+                    
+                    console.log(`✅ Adding transaction: ${description}`)
+                    
+                    const txData = {
+                      hash: transaction.hash,
+                      from: transaction.from,
+                      to: transaction.to,
+                      value: (transaction.value ?? 0n).toString(),
+                      gasUsed: receipt?.gasUsed.toString() || '0',
+                      status: receipt?.status === 1 ? 'success' : 'failed',
+                      blockNumber: i,
+                      timestamp: blockHeader.timestamp,
+                      description,
+                      logs: receipt?.logs.length || 0,
+                      // Include raw data for better type/action detection on UI
+                      data: transaction.data
+                    }
+                    
+                    transactions.push(txData)
+                  } else {
+                    console.log(`❌ Transaction not actually related to Smart Account`)
+                  }
+                } catch (receiptError) {
+                  console.warn(`Failed to get receipt for ${transaction.hash}:`, receiptError)
+                }
+              } else {
+                // Special debug for block 27 transactions that are not relevant
+                if (i === 27) {
+                  console.log(`❌ Block 27 transaction NOT relevant:`, {
+                    hash: transaction.hash,
+                    reason: 'None of the relevance conditions matched'
+                  })
                 }
               }
+            } catch (txError) {
+              console.warn(`Failed to get transaction ${txHash}:`, txError)
             }
           }
         } catch (blockError) {
