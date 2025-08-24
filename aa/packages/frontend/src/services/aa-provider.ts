@@ -619,12 +619,6 @@ export class AAProvider {
           
           console.log(`Block ${i}: ${blockHeader.transactions.length} transactions`)
           
-          // Special debug for block 27
-          if (i === 27) {
-            console.log('=== DEBUG BLOCK 27 ===')
-            console.log('Block 27 transaction hashes:', blockHeader.transactions)
-          }
-          
           // Process each transaction hash
           for (const txHash of blockHeader.transactions) {
             try {
@@ -632,36 +626,16 @@ export class AAProvider {
               const transaction = await this.provider.getTransaction(txHash)
               if (!transaction) continue
 
-              // Special debug for the specific NFT mint transaction
-              if (transaction.hash === '0x98b61159377c1416ac2a909e2f04b04b351d43209231f44d0a07253adf4da81e' || 
-                  transaction.hash?.startsWith('0x98b61159')) {
-                console.log('=== FOUND NFT MINT TRANSACTION ===')
-                console.log('NFT Mint TX Details:', {
-                  hash: transaction.hash,
-                  from: transaction.from,
-                  to: transaction.to,
-                  data: transaction.data,
-                  value: transaction.value?.toString()
-                })
-              }
-
               console.log(`[BLOCK ${i}] Checking TX:`, {
                 hash: transaction.hash,
                 from: transaction.from,
                 to: transaction.to,
-                data: transaction.data
+                data: transaction.data?.slice(0, 42) + '...'
               });
               
               // More comprehensive search criteria
               const smartAccountLower = smartAccount.toLowerCase()
               const factoryAddressLower = this.accountFactoryAddress.toLowerCase()
-              
-              console.log('Comparison details:', {
-                smartAccountLower,
-                transactionToLower: transaction.to?.toLowerCase(),
-                transactionFromLower: transaction.from?.toLowerCase(),
-                factoryAddressLower
-              })
               
               // Check if transaction is related to our Smart Account:
               const isDirectlyRelated = 
@@ -679,7 +653,7 @@ export class AAProvider {
               
               console.log('Relevance check:', {
                 isDirectlyRelated,
-                isFactoryRelated,
+                isFactoryRelated,  
                 isDataRelated,
                 isContractCall
               })
@@ -719,7 +693,7 @@ export class AAProvider {
                   }
                   
                   if (isActuallyRelated) {
-                    // Determine transaction description
+                    // Enhanced transaction description logic
                     let description = 'Transaction'
                     if (isFactoryRelated) {
                       description = 'Smart Account Creation'
@@ -732,7 +706,8 @@ export class AAProvider {
                       } else if (data.includes('40c10f19')) { // mint(address)
                         description = 'NFT Mint'
                       } else if (data.includes('b61d27f6')) { // execute(address,uint256,bytes)
-                        description = 'Smart Account Execute'
+                        // For execute calls, look deeper into the calldata to determine actual action
+                        description = this.analyzeExecuteCallData(data, receipt?.logs)
                       } else if (data.includes('38ed1739')) { // swapExactTokensForTokens
                         description = 'Token Swap'
                       } else if (isContractCall) {
@@ -764,14 +739,6 @@ export class AAProvider {
                 } catch (receiptError) {
                   console.warn(`Failed to get receipt for ${transaction.hash}:`, receiptError)
                 }
-              } else {
-                // Special debug for block 27 transactions that are not relevant
-                if (i === 27) {
-                  console.log(`❌ Block 27 transaction NOT relevant:`, {
-                    hash: transaction.hash,
-                    reason: 'None of the relevance conditions matched'
-                  })
-                }
               }
             } catch (txError) {
               console.warn(`Failed to get transaction ${txHash}:`, txError)
@@ -799,6 +766,56 @@ export class AAProvider {
     } catch (error) {
       console.error('Failed to get transaction history:', error)
       return []
+    }
+  }
+
+  // Helper method to analyze execute call data and logs
+  private analyzeExecuteCallData(data: string, logs?: any[]): string {
+    try {
+      // Look for specific patterns in execute calldata
+      const callData = data.toLowerCase()
+      
+      // If execute contains NFT mint signature
+      if (callData.includes('40c10f19')) {
+        return 'NFT Mint'
+      }
+      
+      // If execute contains token transfer signature  
+      if (callData.includes('a9059cbb')) {
+        return 'Token Transfer'
+      }
+      
+      // If execute contains token swap signature
+      if (callData.includes('38ed1739')) {
+        return 'Token Swap'
+      }
+      
+      // Analyze logs for more context
+      if (logs && logs.length > 0) {
+        for (const log of logs) {
+          // Check for Transfer events (ERC20/ERC721)
+          if (log.topics && log.topics[0]) {
+            const topic0 = log.topics[0].toLowerCase()
+            
+            // ERC721 Transfer topic: Transfer(address,address,uint256)
+            if (topic0 === '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef') {
+              // Check if it's an NFT mint (from 0x0)
+              if (log.topics[1] === '0x0000000000000000000000000000000000000000000000000000000000000000') {
+                return 'NFT Mint'
+              } else {
+                return 'Token Transfer'
+              }
+            }
+            
+            // Custom event signatures can be added here
+          }
+        }
+      }
+      
+      return 'Smart Account Execute'
+    } catch (error) {
+      console.warn('Failed to analyze execute calldata:', error)
+      return 'Smart Account Execute'
     }
   }
 }
