@@ -138,3 +138,13 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Usage tracking files
+usage_tracking*.json
+
+# Custom
+/packages/**/dist
+/packages/**/artifacts
+/packages/**/cache
+/packages/**/typechain-types
+/uploads/
