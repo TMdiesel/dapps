@@ -148,3 +148,4 @@ usage_tracking*.json
 /packages/**/cache
 /packages/**/typechain-types
 /uploads/
+/packages/contracts/deployments/

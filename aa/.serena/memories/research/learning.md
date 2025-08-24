@@ -179,3 +179,120 @@
 
 このドキュメントは、当リポジトリの学習・改修の出発点です。必要に応じて、具体的な送信パラメータ例・ガス計測・失敗時のトラブルシュートを追記してください。
 
+## Mermaid 図（シーケンス / アーキテクチャ）
+
+### シーケンス（本リポジトリの実動パス：Factory 先出し→UserOperation）
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant FE as Frontend (aa-provider.ts)
+    participant Fac as SimpleAccountFactory
+    participant Bundler as Bundler RPC (/rpc)
+    participant EP as EntryPoint (0x5FF1...2789)
+    participant PM as Paymaster (Demo/Mock)
+    participant SA as SimpleAccount
+    participant Target as Target Contracts (DemoToken/NFT/DEX)
+
+    Note over FE: createSmartAccount(owner, salt)
+    FE->>Fac: createAccount(owner, salt)（未デプロイ時）
+    Fac-->>FE: receipt / getAddress(owner, salt)
+    Note over FE: buildUserOperation(sender, callData, paymasterAndData, ...)
+    FE->>Bundler: eth_sendUserOperation(userOp, entryPoint)
+    Bundler->>EP: handleOps([userOp], beneficiary)
+
+    alt sender 未デプロイ（initCode 経由）
+        EP->>Fac: initCode 実行（SenderCreator 経由）
+        Fac-->>EP: SA デプロイ
+    else 既デプロイ
+        Note over EP,SA: initCode = 0x（スキップ）
+    end
+
+    EP->>SA: validateUserOp（署名/nonce 検証）
+    opt paymasterAndData あり
+        EP->>PM: validatePaymasterUserOp
+        PM-->>EP: validationData
+    end
+
+    EP->>SA: execute / executeBatch（callData 実行）
+    SA->>Target: call(dest, value, data)
+    opt Paymaster 利用
+        EP->>PM: postOp（精算/記録 等）
+    end
+
+    EP-->>Bundler: result
+    Bundler-->>FE: userOpHash / receipt
+    FE->>Bundler: eth_getUserOperationReceipt(userOpHash)
+    Bundler-->>FE: receipt
+```
+
+補足:
+- 本リポジトリは「Factory で先にデプロイ」→ `initCode=0x` の経路をデフォルト採用（`aa-provider.ts`）。
+- initCode デプロイを採る場合は、UserOperation の `initCode` に `factory.createAccount(owner, salt)` 呼び出しデータを組み込みます。
+
+### アーキテクチャ（コンポーネント関連）
+
+```mermaid
+graph TD
+    subgraph Frontend
+        FE[aa-provider.ts]
+    end
+    subgraph Contracts
+        SA[SimpleAccount<br/>packages/contracts/contracts/account/SimpleAccount.sol]
+        FAC[SimpleAccountFactory<br/>packages/contracts/contracts/account/SimpleAccountFactory.sol]
+        PM[Paymaster (Demo/Mock)<br/>packages/contracts/contracts/paymaster]
+        TKN[DemoToken/DemoNFT/SimpleDEX]
+        EP[EntryPoint<br/>bundler/submodules/account-abstraction/contracts/core/EntryPoint.sol]
+    end
+    subgraph Services
+        BDR[Bundler (/rpc)]
+        RPC[Hardhat Node (8545)]
+    end
+
+    FE -- createAccount/getAddress --> FAC
+    FAC -- CREATE2 + ERC1967Proxy --> SA
+    FE -- eth_sendUserOperation --> BDR
+    BDR -- handleOps --> EP
+    EP -- validateUserOp/execute --> SA
+    SA -- execute/executeBatch --> TKN
+    EP -- validatePaymasterUserOp/postOp --> PM
+
+    FE --- RPC
+    BDR --- RPC
+```
+
+## EntryPoint の定義と配置方針
+
+- 定義元（実装）
+  - `bundler/submodules/account-abstraction/contracts/core/EntryPoint.sol`
+  - Bundler と完全整合のとれた実装を使うため、bundler 配下に account-abstraction リポジトリをサブモジュールとして同梱しています。
+
+- アプリ側の参照（IF）
+  - `@account-abstraction/contracts/interfaces/IEntryPoint.sol` を npm から参照（実装はビルドしない）
+  - 例: `SimpleAccount.sol` は `IEntryPoint` を参照、`SimpleAccountFactory` のコンストラクタも `IEntryPoint` を受け取ります。
+
+- 既知アドレス（前提）
+  - `0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789`
+  - 参照箇所: `packages/contracts/scripts/deploy-simple.ts`、`packages/frontend/src/services/aa-provider.ts`
+
+- なぜ bundler のサブモジュールなのか
+  - Bundler の検証/シミュレーションと EntryPoint 実装のバージョンを厳密に合わせる必要があるため
+  - 実装を二重管理せず、衝突や齟齬を避けるため（アプリ側は IF のみ）
+
+- ローカルで同一アドレスを用意する方法（localhost）
+  - 公開ネットでは上記アドレスが既にデプロイ済み（標準アドレス）
+  - localhost では存在しないため、Create2 による決定論的デプロイで同一アドレスを確保します
+  - サブモジュールのデプロイスクリプトを利用する例:
+
+    ```bash
+    # Terminal 1: Hardhat ノード
+    npm run start:node
+
+    # Terminal 2: account-abstraction サブモジュールから EntryPoint をデプロイ
+    cd bundler/submodules/account-abstraction
+    npm install
+    npx hardhat run deploy/1_deploy_entrypoint.ts --network localhost
+    ```
+
+  - デプロイ後、`0x5FF1...2789` にコードが載っていることを `eth_getCode` などで確認してください
+  - もし別アドレスを使う場合は、`deploy-simple.ts` と `aa-provider.ts` の定数も更新が必要です
