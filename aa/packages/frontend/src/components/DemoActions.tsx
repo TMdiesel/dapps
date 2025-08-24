@@ -11,13 +11,60 @@ const DemoActions: React.FC<DemoActionsProps> = ({ smartAccount }) => {
   const executeAction = async (action: string) => {
     setIsExecuting(true)
     try {
-      // Simulate transaction execution
       console.log(`Executing ${action} for account ${smartAccount}`)
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      alert(`${action} executed successfully!`)
+      
+      // Import AA Provider for real blockchain interactions
+      const { aaProvider } = await import('../services/aa-provider')
+      let txHash: string
+      
+      switch (action) {
+        case 'Token Transfer':
+          // Execute token transfer through Smart Account
+          txHash = await aaProvider.transferToken(
+            smartAccount,
+            '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', // recipient
+            '10', // amount
+            '0x68B1D87F95878fE05B998F19b66F4baba5De1aed' // token address from deployments
+          )
+          break
+          
+        case 'NFT Mint':
+          // Execute NFT mint through Smart Account
+          txHash = await aaProvider.mintNFT(
+            smartAccount,
+            '0x3Aa5ebB10DC797CAC828524e59A333d0A371443c' // NFT contract address from deployments
+          )
+          break
+          
+        case 'Token Swap':
+          // Execute token swap through Smart Account
+          txHash = await aaProvider.swapTokens(
+            smartAccount,
+            '0xc6e7DF5E7b4f2A278906862b61205850344D4e7d', // DEX address from deployments
+            '0x68B1D87F95878fE05B998F19b66F4baba5De1aed', // tokenIn
+            '0x0000000000000000000000000000000000000000', // tokenOut (ETH)
+            '5', // amountIn
+            '0.01' // amountOutMin
+          )
+          break
+          
+        default:
+          throw new Error(`Unknown action: ${action}`)
+      }
+      
+      console.log(`✅ ${action} transaction completed:`, txHash)
+      alert(`${action} executed successfully! Transaction: ${txHash.slice(0, 10)}...`)
+      
+      // Wait a bit for the transaction to be mined, then reload transaction history
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('transactionCompleted', { 
+          detail: { action, txHash, smartAccount } 
+        }))
+      }, 3000)
+      
     } catch (error) {
-      console.error('Action failed:', error)
-      alert('Action failed. Please try again.')
+      console.error(`❌ ${action} failed:`, error)
+      alert(`${action} failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setIsExecuting(false)
     }

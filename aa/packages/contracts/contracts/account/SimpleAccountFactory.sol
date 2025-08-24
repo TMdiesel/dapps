@@ -34,18 +34,25 @@ contract SimpleAccountFactory {
                 address(accountImplementation),
                 abi.encodeCall(SimpleAccount.initialize, (owner))
         )));
+        
+        // Verify the address matches what we computed
+        require(address(ret) == addr, "SimpleAccountFactory: created account address mismatch");
     }
 
     /**
      * calculate the counterfactual address of this account as it would be returned by createAccount()
      */
     function getAddress(address owner, uint256 salt) public view returns (address) {
-        return Create2.computeAddress(bytes32(salt), keccak256(abi.encodePacked(
+        return Create2.computeAddress(
+            bytes32(salt),
+            keccak256(abi.encodePacked(
                 type(ERC1967Proxy).creationCode,
                 abi.encode(
                     address(accountImplementation),
                     abi.encodeCall(SimpleAccount.initialize, (owner))
                 )
-        )));
+            )),
+            address(this)
+        );
     }
 }

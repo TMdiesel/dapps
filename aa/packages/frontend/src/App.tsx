@@ -5,10 +5,12 @@ import DemoActions from './components/DemoActions'
 import TransactionHistory from './components/TransactionHistory'
 import Header from './components/Header'
 import Features from './components/Features'
+import BlockExplorer from './components/BlockExplorer'
 
 function App() {
   const [isConnected, setIsConnected] = useState(false)
   const [smartAccount, setSmartAccount] = useState<string>('')
+  const [activeView, setActiveView] = useState<'demo' | 'explorer'>('demo')
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
@@ -70,14 +72,47 @@ function App() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
-            <div className="xl:col-span-3 space-y-8">
-              <AccountInfo smartAccount={smartAccount} />
-              <DemoActions smartAccount={smartAccount} />
+          <div className="space-y-6">
+            {/* Navigation Tabs */}
+            <div className="flex space-x-1 bg-white p-1 rounded-lg shadow-sm max-w-md mx-auto">
+              <button
+                onClick={() => setActiveView('demo')}
+                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                  activeView === 'demo'
+                    ? 'bg-primary-500 text-white shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                🏠 Demo
+              </button>
+              <button
+                onClick={() => setActiveView('explorer')}
+                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                  activeView === 'explorer'
+                    ? 'bg-primary-500 text-white shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                🔍 Explorer
+              </button>
             </div>
-            <div className="xl:col-span-1">
-              <TransactionHistory />
-            </div>
+
+            {/* Content based on active view */}
+            {activeView === 'demo' ? (
+              <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
+                <div className="xl:col-span-3 space-y-8">
+                  <AccountInfo smartAccount={smartAccount} />
+                  <DemoActions smartAccount={smartAccount} />
+                </div>
+                <div className="xl:col-span-1">
+                  <TransactionHistory />
+                </div>
+              </div>
+            ) : (
+              <div className="max-w-6xl mx-auto">
+                <BlockExplorer />
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -90,13 +125,16 @@ function App() {
               <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg"></div>
               <span className="text-xl font-bold gradient-text">AA Demo</span>
             </div>
-            <p className="text-gray-600">
-              🚀 Built with Account Abstraction (ERC-4337) • Educational Demo
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              Built with ERC-4337 Account Abstraction, enabling gasless transactions and enhanced user experiences.
+              Explore the future of decentralized applications today.
             </p>
-            <div className="flex justify-center space-x-6 text-sm text-gray-500">
-              <span>🔐 Your keys, your crypto</span>
-              <span>💰 Zero gas fees</span>
-              <span>🎯 Smart contract wallets</span>
+            <div className="flex items-center justify-center space-x-6 text-sm text-gray-500">
+              <span>Powered by Ethereum</span>
+              <span>•</span>
+              <span>ERC-4337 Compatible</span>
+              <span>•</span>
+              <span>Open Source</span>
             </div>
           </div>
         </div>
