@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 
 interface DemoActionsProps {
   smartAccount: string
@@ -7,6 +7,31 @@ interface DemoActionsProps {
 const DemoActions: React.FC<DemoActionsProps> = ({ smartAccount }) => {
   const [activeTab, setActiveTab] = useState<'token' | 'nft' | 'dex'>('token')
   const [isExecuting, setIsExecuting] = useState(false)
+  const [addresses, setAddresses] = useState<{
+    demoToken?: string
+    demoNFT?: string
+    simpleDEX?: string
+  }>({})
+
+  // Load latest deployed addresses from public file
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch('/latest-localhost.json')
+        if (res.ok) {
+          const json = await res.json()
+          setAddresses({
+            demoToken: json.demoToken,
+            demoNFT: json.demoNFT,
+            simpleDEX: json.simpleDEX,
+          })
+        }
+      } catch (e) {
+        console.warn('Failed to load deployment addresses:', e)
+      }
+    }
+    load()
+  }, [])
 
   const executeAction = async (action: string) => {
     setIsExecuting(true)
@@ -24,7 +49,7 @@ const DemoActions: React.FC<DemoActionsProps> = ({ smartAccount }) => {
             smartAccount,
             '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', // recipient
             '10', // amount
-            '0x68B1D87F95878fE05B998F19b66F4baba5De1aed' // token address from deployments
+            addresses.demoToken || '0x68B1D87F95878fE05B998F19b66F4baba5De1aed' // token address
           )
           break
           
@@ -32,7 +57,7 @@ const DemoActions: React.FC<DemoActionsProps> = ({ smartAccount }) => {
           // Execute NFT mint through Smart Account
           txHash = await aaProvider.mintNFT(
             smartAccount,
-            '0x3Aa5ebB10DC797CAC828524e59A333d0A371443c' // NFT contract address from deployments
+            addresses.demoNFT || '0x3Aa5ebB10DC797CAC828524e59A333d0A371443c' // NFT address
           )
           break
           
@@ -40,8 +65,8 @@ const DemoActions: React.FC<DemoActionsProps> = ({ smartAccount }) => {
           // Execute token swap through Smart Account
           txHash = await aaProvider.swapTokens(
             smartAccount,
-            '0xc6e7DF5E7b4f2A278906862b61205850344D4e7d', // DEX address from deployments
-            '0x68B1D87F95878fE05B998F19b66F4baba5De1aed', // tokenIn
+            addresses.simpleDEX || '0xc6e7DF5E7b4f2A278906862b61205850344D4e7d', // DEX address
+            addresses.demoToken || '0x68B1D87F95878fE05B998F19b66F4baba5De1aed', // tokenIn
             '0x0000000000000000000000000000000000000000', // tokenOut (ETH)
             '5', // amountIn
             '0.01' // amountOutMin

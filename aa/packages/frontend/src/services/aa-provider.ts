@@ -23,6 +23,7 @@ export class AAProvider {
   private accountFactoryAddress: string
   private paymasterAddress: string
   private deployedContracts: any
+  private recentTxHashes: string[] = []
 
   constructor(
     rpcUrl: string = 'http://localhost:8545',
@@ -357,6 +358,22 @@ export class AAProvider {
     }
 
     const provider = new ethers.BrowserProvider(window.ethereum)
+    // Ensure MetaMask network matches our RPC provider
+    try {
+      const [metaNet, localNet] = await Promise.all([
+        provider.getNetwork(),
+        this.provider.getNetwork(),
+      ])
+      if (metaNet.chainId !== localNet.chainId) {
+        throw new Error(
+          `MetaMask is on chainId ${metaNet.chainId}, but app is using ${localNet.chainId}. ` +
+          `Please switch MetaMask to the local network (e.g., Localhost 8545).`
+        )
+      }
+    } catch (e) {
+      // Re-throw to inform UI and user
+      throw e
+    }
     return await provider.getSigner()
   }
 
@@ -399,6 +416,44 @@ export class AAProvider {
     }
   }
 
+  // Fetch a single transaction detail by hash and format like history entries
+  async getTransactionDetails(hash: string): Promise<any | null> {
+    try {
+      const tx = await this.provider.getTransaction(hash)
+      if (!tx) return null
+      const receipt = await this.provider.getTransactionReceipt(hash)
+      let timestamp = 0
+      if (receipt?.blockNumber != null) {
+        const block = await this.provider.getBlock(receipt.blockNumber)
+        timestamp = block?.timestamp ?? 0
+      }
+      return {
+        hash: tx.hash,
+        from: tx.from,
+        to: tx.to,
+        value: (tx.value ?? 0n).toString(),
+        gasUsed: receipt?.gasUsed?.toString() || '0',
+        status: receipt?.status === 1 ? 'success' : 'failed',
+        blockNumber: receipt?.blockNumber ?? null,
+        timestamp,
+        description: this.describeTransaction(tx.data)
+      }
+    } catch (e) {
+      console.warn('getTransactionDetails failed:', e)
+      return null
+    }
+  }
+
+  private describeTransaction(data?: string | null): string {
+    if (!data || data === '0x') return 'ETH Transfer'
+    const d = data.toLowerCase()
+    if (d.includes('b61d27f6')) return 'Smart Account Execute'
+    if (d.includes('a9059cbb')) return 'Token Transfer'
+    if (d.includes('40c10f19')) return 'NFT Mint'
+    if (d.includes('38ed1739')) return 'Token Swap'
+    return 'Contract Interaction'
+  }
+
   // Token operations
   async transferToken(
     from: string,
@@ -420,14 +475,39 @@ export class AAProvider {
 
     const tx = await accountWithSigner['execute'](tokenAddress, 0, callData)
     await tx.wait()
-    
+
+    // Broadcast completion so UI can refresh history
+    try {
+      this.recentTxHashes.unshift(tx.hash)
+      this.recentTxHashes = this.recentTxHashes.slice(0, 10)
+      window.dispatchEvent(
+        new CustomEvent('transactionCompleted', {
+          detail: { action: 'Token Transfer', txHash: tx.hash, account: from }
+        })
+      )
+    } catch {}
+
     return tx.hash
   }
 
   // NFT operations
   async mintNFT(account: string, nftAddress: string): Promise<string> {
     const callData = this.encodeMintCall(account)
-    
+
+    // Read mint price so we send correct ETH value with the call
+    let mintPrice: bigint = 0n
+    try {
+      const nft = new ethers.Contract(
+        nftAddress,
+        ['function mintPrice() view returns (uint256)'],
+        this.provider
+      )
+      mintPrice = await nft['mintPrice']()
+    } catch (e) {
+      console.warn('Could not read mintPrice(), proceeding with fallback 0.001 ETH:', e)
+      mintPrice = ethers.parseEther('0.001')
+    }
+
     const accountContract = new ethers.Contract(
       account,
       ['function execute(address dest, uint256 value, bytes calldata func)'],
@@ -437,9 +517,20 @@ export class AAProvider {
     const ownerSigner = await this.getOwnerSigner()
     const accountWithSigner = accountContract.connect(ownerSigner)
 
-    const tx = await accountWithSigner['execute'](nftAddress, 0, callData)
+    const tx = await accountWithSigner['execute'](nftAddress, mintPrice, callData)
     await tx.wait()
-    
+
+    // Broadcast completion so UI can refresh history
+    try {
+      this.recentTxHashes.unshift(tx.hash)
+      this.recentTxHashes = this.recentTxHashes.slice(0, 10)
+      window.dispatchEvent(
+        new CustomEvent('transactionCompleted', {
+          detail: { action: 'NFT Mint', txHash: tx.hash, account }
+        })
+      )
+    } catch {}
+
     return tx.hash
   }
 
@@ -465,7 +556,18 @@ export class AAProvider {
 
     const tx = await accountWithSigner['execute'](dexAddress, 0, callData)
     await tx.wait()
-    
+
+    // Broadcast completion so UI can refresh history
+    try {
+      this.recentTxHashes.unshift(tx.hash)
+      this.recentTxHashes = this.recentTxHashes.slice(0, 10)
+      window.dispatchEvent(
+        new CustomEvent('transactionCompleted', {
+          detail: { action: 'Token Swap', txHash: tx.hash, account }
+        })
+      )
+    } catch {}
+
     return tx.hash
   }
 
@@ -596,13 +698,15 @@ export class AAProvider {
                         hash: transaction.hash,
                         from: transaction.from,
                         to: transaction.to,
-                        value: transaction.value.toString(),
+                        value: (transaction.value ?? 0n).toString(),
                         gasUsed: receipt?.gasUsed.toString() || '0',
                         status: receipt?.status === 1 ? 'success' : 'failed',
                         blockNumber: i,
                         timestamp: block.timestamp,
                         description,
-                        logs: receipt?.logs.length || 0
+                        logs: receipt?.logs.length || 0,
+                        // Include raw data for better type/action detection on UI
+                        data: transaction.data
                       })
                     } else {
                       console.log(`❌ Transaction not actually related to Smart Account`)

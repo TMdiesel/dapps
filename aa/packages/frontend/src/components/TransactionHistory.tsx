@@ -34,6 +34,8 @@ const TransactionHistory: React.FC = () => {
         // Transform the data for display
         const transformedTxs = history.map((tx: any, index: number) => ({
           id: tx.hash || index.toString(),
+          // Keep original data if present so type detection works
+          data: tx.data,
           type: determineTransactionType(tx),
           action: tx.description || getTransactionAction(tx),
           amount: formatTransactionAmount(tx),
@@ -50,33 +52,46 @@ const TransactionHistory: React.FC = () => {
 
         console.log('Transformed transactions:', transformedTxs)
         
-        if (transformedTxs.length === 0) {
-          console.log('No transactions found. This might mean:')
-          console.log('1. No transactions have been made yet')
-          console.log('2. Transactions are in blocks outside our search range')
-          console.log('3. Smart Account address is incorrect:', fullSmartAccount)
-          console.log('Showing demo data instead...')
-          
-          // Show demo data when no real transactions found
-          setTransactions([
-            {
-              id: 'demo-1',
-              type: 'token',
-              action: 'Smart Account Created',
-              amount: 'Factory Call',
-              status: 'success',
-              timestamp: 'Just now',
-              hash: '0x6bff89c024af71f14932de1a325d4a3443ccb35e4056be39a877321dc82667c1',
-              gasUsed: '0 ETH (Sponsored)',
-              blockNumber: 28,
-              from: '0x70997970c51812dc3a010c7d01b50e0d17dc79c8',
-              to: '0x9A9f2CCfdE556A7E9Ff0848998Aa4a0CFD8863AE',
-              value: '0'
-            }
-          ])
-        } else {
-          setTransactions(transformedTxs)
-        }
+        // Merge with any optimistic items already shown instead of replacing.
+        setTransactions((prev) => {
+          // If nothing fetched, keep previous (avoid flicker/disappear) or show demo if empty.
+          if (transformedTxs.length === 0) {
+            if (prev.length > 0) return prev
+            // Show demo only when we have absolutely nothing to show
+            return [
+              {
+                id: 'demo-1',
+                type: 'token',
+                action: 'Smart Account Created',
+                amount: 'Factory Call',
+                status: 'success',
+                timestamp: 'Just now',
+                hash: '0x6bff89c024af71f14932de1a325d4a3443ccb35e4056be39a877321dc82667c1',
+                gasUsed: '0 ETH (Sponsored)',
+                blockNumber: 28,
+                from: '0x70997970c51812dc3a010c7d01b50e0d17dc79c8',
+                to: '0x9A9f2CCfdE556A7E9Ff0848998Aa4a0CFD8863AE',
+                value: '0'
+              }
+            ]
+          }
+
+          // Merge by hash, prefer fetched items over optimistic duplicates
+          const byHash = new Map<string, any>()
+          for (const t of prev) {
+            if (t.hash) byHash.set(t.hash, t)
+          }
+          for (const t of transformedTxs) {
+            if (t.hash) byHash.set(t.hash, t)
+          }
+          // Preserve order: fetched first (already sorted by backend), then any remaining prev
+          const fetchedHashes = new Set(transformedTxs.map(t => t.hash))
+          const merged: any[] = [...transformedTxs]
+          for (const t of prev) {
+            if (t.hash && !fetchedHashes.has(t.hash)) merged.push(t)
+          }
+          return merged
+        })
         
       } catch (error) {
         console.error('Failed to load transaction history:', error)
@@ -90,18 +105,50 @@ const TransactionHistory: React.FC = () => {
     loadTransactionHistory()
     
     // Listen for new transactions
-    const handleTransactionCompleted = () => {
+    const handleTransactionCompleted = async (event: any) => {
       console.log('🎆 New transaction completed, reloading history...')
+      const txHash = event?.detail?.txHash as string | undefined
+      // Optimistically fetch the single tx by hash and prepend
+      if (txHash) {
+        try {
+          const tx = await aaProvider.getTransactionDetails(txHash)
+          if (tx) {
+            const optimistic = {
+              id: tx.hash,
+              data: tx.data,
+              type: determineTransactionType(tx),
+              action: tx.description || getTransactionAction(tx),
+              amount: formatTransactionAmount(tx),
+              status: tx.status,
+              timestamp: tx.timestamp ? formatTimestamp(tx.timestamp) : 'Just now',
+              hash: tx.hash,
+              gasUsed: `${parseInt(tx.gasUsed || '0').toLocaleString()} wei`,
+              blockNumber: tx.blockNumber,
+              from: tx.from,
+              to: tx.to,
+              value: tx.value,
+              logs: tx.logs || 0
+            }
+            setTransactions(prev => {
+              const exists = prev.some(p => p.hash === optimistic.hash)
+              return exists ? prev : [optimistic, ...prev]
+            })
+          }
+        } catch (e) {
+          console.warn('Failed to optimistically fetch tx details:', e)
+        }
+      }
+      // Then refresh full history shortly after
       setTimeout(() => {
         loadTransactionHistory()
-      }, 2000) // Wait a bit for transaction to be mined
+      }, 1500)
     }
     
-    window.addEventListener('transactionCompleted', handleTransactionCompleted)
+    window.addEventListener('transactionCompleted', handleTransactionCompleted as EventListener)
     
     // Cleanup event listener
     return () => {
-      window.removeEventListener('transactionCompleted', handleTransactionCompleted)
+      window.removeEventListener('transactionCompleted', handleTransactionCompleted as EventListener)
     }
   }, [smartAccount])
 
