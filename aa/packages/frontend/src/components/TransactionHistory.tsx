@@ -10,7 +10,11 @@ const TransactionHistory: React.FC = () => {
   useEffect(() => {
     console.log('TransactionHistory useEffect triggered with smartAccount:', smartAccount)
     const loadTransactionHistory = async () => {
-      if (!smartAccount) {
+      // Prefer hook value; fall back to localStorage so reloadでも保持
+      const stored = typeof window !== 'undefined' ? localStorage.getItem('smartAccount') : null
+      const effectiveSmartAccount = smartAccount || stored
+
+      if (!effectiveSmartAccount) {
         setTransactions([])
         setLoading(false)
         return
@@ -18,11 +22,11 @@ const TransactionHistory: React.FC = () => {
 
       try {
         setLoading(true)
-        console.log('Loading transaction history for smartAccount:', smartAccount)
-        console.log('Smart Account length:', smartAccount?.length)
+        console.log('Loading transaction history for smartAccount:', effectiveSmartAccount)
+        console.log('Smart Account length:', effectiveSmartAccount?.length)
         
         // Use the smartAccount directly since WalletConnect now provides the correct address
-        const fullSmartAccount = smartAccount
+        const fullSmartAccount = effectiveSmartAccount
         console.log('Using Smart Account address:', fullSmartAccount)
         console.log('About to call aaProvider.getTransactionHistory...')
         

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import WalletConnect from './components/WalletConnect'
 import AccountInfo from './components/AccountInfo'
 import DemoActions from './components/DemoActions'
@@ -11,6 +11,48 @@ function App() {
   const [isConnected, setIsConnected] = useState(false)
   const [smartAccount, setSmartAccount] = useState<string>('')
   const [activeView, setActiveView] = useState<'demo' | 'explorer'>('demo')
+
+  // Restore connection state on reload if we have stored addresses
+  useEffect(() => {
+    const restore = async () => {
+      const storedSmart = localStorage.getItem('smartAccount')
+      const storedOwner = localStorage.getItem('owner')
+      if (storedSmart && storedOwner) {
+        try {
+          if (typeof window !== 'undefined' && (window as any).ethereum) {
+            const accounts = await (window as any).ethereum.request({ method: 'eth_accounts' })
+            if (accounts && accounts[0] && accounts[0].toLowerCase() === storedOwner.toLowerCase()) {
+              setIsConnected(true)
+              setSmartAccount(storedSmart)
+            } else {
+              // Owner mismatch; clear stale storage to avoid phantom connected state
+              localStorage.removeItem('smartAccount')
+              localStorage.removeItem('owner')
+            }
+          } else {
+            // No ethereum provider; still restore UI so user sees account
+            setIsConnected(true)
+            setSmartAccount(storedSmart)
+          }
+        } catch {
+          setIsConnected(true)
+          setSmartAccount(storedSmart)
+        }
+      }
+    }
+    restore()
+
+    // Sync with global walletConnected events (from WalletConnect/useAAWallet)
+    const onWalletConnected = (e: any) => {
+      const sa = e?.detail?.smartAccount
+      if (sa) {
+        setIsConnected(true)
+        setSmartAccount(sa)
+      }
+    }
+    window.addEventListener('walletConnected', onWalletConnected as EventListener)
+    return () => window.removeEventListener('walletConnected', onWalletConnected as EventListener)
+  }, [])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
