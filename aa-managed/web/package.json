@@ -1,0 +1,40 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "dev:webpack": "next dev --no-turbo",
+    "build": "next build --turbopack",
+    "build:webpack": "next build",
+    "clean": "rm -rf .next",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@alchemy/aa-accounts": "^3.19.0",
+    "@alchemy/aa-core": "^3.19.0",
+    "@alchemy/aa-ethers": "^3.19.0",
+    "@tanstack/react-query": "^5.85.6",
+    "@web3auth/modal": "^10.3.0",
+    "@web3auth/openlogin-adapter": "^8.12.4",
+    "ethers": "^6.15.0",
+    "next": "15.5.2",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "viem": "^2.36.0",
+    "zod": "^3.25.76",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.2",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
